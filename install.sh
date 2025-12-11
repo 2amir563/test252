@@ -1,11 +1,11 @@
 #!/bin/bash
-# Telegram Media Downloader Bot - Complete Installer (V24 - Fixes + English)
-# Targets: Pinterest, Vimeo, Dailymotion, Rumble, Bilibili compatibility fixes.
+# Telegram Media Downloader Bot - Complete Installer (V25 - CRITICAL FIXES + English)
+# Focuses on: Ensuring successful yt-dlp execution and network stability.
 
 set -e # Exit immediately if a command exits with a non-zero status.
 
 echo "=============================================="
-echo "🤖 Telegram Media Downloader Bot - V24 (Fixes + English)"
+echo "🤖 Telegram Media Downloader Bot - V25 (CRITICAL FIXES + English)"
 echo "=============================================="
 echo ""
 
@@ -38,9 +38,10 @@ print_status "Starting installation process..."
 # ============================================
 # STEP 1: System Update & Essential Tools
 # ============================================
-print_status "Updating and installing essential tools (Python3, PIP, FFmpeg)..."
+print_status "Updating and installing essential tools (Python3, PIP, FFmpeg, Core packages)..."
 apt-get update -y
-apt-get install -y python3 python3-pip ffmpeg curl wget nano git
+# Install build-essential for potential dependencies needed by pip packages
+apt-get install -y python3 python3-pip ffmpeg curl wget nano git build-essential
 
 # Remove system's youtube-dl/yt-dlp to prevent conflicts
 print_status "Removing system yt-dlp/youtube-dl packages..."
@@ -60,7 +61,7 @@ chmod -R 777 downloads logs cookies tmp
 # ============================================
 # STEP 3: Install Python Packages (Core requirements only)
 # ============================================
-print_status "Installing/Upgrading yt-dlp and core Python packages..."
+print_status "Installing/Upgrading yt-dlp and core Python packages (Aggressive Install)..."
 
 cat > requirements.txt << 'REQEOF'
 python-telegram-bot>=20.7
@@ -72,10 +73,28 @@ psutil>=5.9.8
 REQEOF
 
 python3 -m pip install --upgrade pip
-python3 -m pip install -r requirements.txt
+# Aggressive install with compatibility flags
+python3 -m pip install -r requirements.txt --break-system-packages --ignore-installed
 
 # ============================================
-# STEP 4: Create Configuration (.env)
+# STEP 4: Network Test (CRITICAL DIAGNOSIS)
+# ============================================
+echo ""
+print_status "Running critical network and yt-dlp test..."
+# Test if yt-dlp can connect to YouTube/network
+if ! python3 -m yt_dlp --ignore-config --ignore-errors --skip-download --print url https://www.youtube.com/watch?v=dQw4w9WgXcQ >/dev/null 2>&1; then
+    print_error "FATAL ERROR: yt-dlp failed to run or network access is blocked!"
+    echo "This indicates a severe problem with your server's network configuration or firewall."
+    echo "Check your server provider's firewall settings or DNS configuration."
+    # We do NOT exit here, to allow the bot to be installed, but warn user clearly.
+else
+    print_status "yt-dlp and network connectivity check passed successfully."
+fi
+echo ""
+
+
+# ============================================
+# STEP 5: Create Configuration (.env)
 # ============================================
 print_status "Creating configuration files..."
 
@@ -87,14 +106,14 @@ USER_AGENT="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,
 ENVEOF
 
 # ============================================
-# STEP 5: Create Bot File (bot.py - V24 - Fixes + English)
+# STEP 6: Create Bot File (bot.py - V25 - Fixes + English)
 # ============================================
-print_status "Creating main bot file (bot.py - V24)..."
+print_status "Creating main bot file (bot.py - V25)..."
 
 cat > bot.py << 'PYEOF'
 #!/usr/bin/env python3
 """
-Telegram Media Downloader Bot - V24 (Fixes + English - Title/URL in Caption)
+Telegram Media Downloader Bot - V25 (Fixes + English - Title/URL in Caption)
 """
 
 import os
@@ -213,15 +232,14 @@ async def download_video(url, output_path):
         "--no-playlist",
         "--concurrent-fragments", "4",
         "--limit-rate", "10M",
-        # Stability and Access Fixes for various sites (V24)
         "--retries", "10",               
         "--fragment-retries", "10",      
         "--user-agent", USER_AGENT, 
         "--no-check-certificate", 
         "--referer", "https://google.com/",
         "--http-chunk-size", "10M",
-        "--force-ipv4", # Fixes some DNS issues
-        "--add-header", "Accept-Language: en-US,en;q=0.5", # Helps Bilibili/foreign sites
+        "--force-ipv4", 
+        "--add-header", "Accept-Language: en-US,en;q=0.5", 
         "--force-overwrite",
         url
     ]
@@ -241,7 +259,6 @@ async def download_video(url, output_path):
         if process.returncode == 0:
             return True, "Success"
         else:
-            # Enhanced error message for better diagnostics
             error_output = stderr.decode('utf-8', errors='ignore')
             
             if "HTTP Error 404" in error_output or "Private video" in error_output:
@@ -258,7 +275,7 @@ async def download_video(url, output_path):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /start command"""
     welcome = f"""
-🤖 *UNIVERSAL Media Downloader Bot - V24 (Fixed)*
+🤖 *UNIVERSAL Media Downloader Bot - V25 (Fixed)*
 
 📝 *How to Use:*
 1. Send any media URL (Pinterest, Vimeo, Bilibili, etc.).
@@ -383,7 +400,7 @@ PYEOF
 chmod +x bot.py
 
 # ============================================
-# STEP 6: Create Systemd Service (Start-up on reboot)
+# STEP 7: Create Systemd Service (Start-up on reboot)
 # ============================================
 print_status "Creating systemd service for persistent running..."
 PYTHON_PATH=$(which python3)
@@ -412,42 +429,34 @@ systemctl daemon-reload
 systemctl enable telegram-media-bot.service
 
 # ============================================
-# STEP 7: Start Service
+# STEP 8: Start Service
 # ============================================
 print_status "Starting the bot service..."
 systemctl start telegram-media-bot.service
 sleep 3
 
 # ============================================
-# STEP 8: Show Final Instructions and COOKIE GUIDE (English)
+# STEP 9: Show Final Instructions and COOKIE GUIDE (English)
 # ============================================
 echo ""
 echo "================================================"
-echo "🎉 Installation Complete (V24 - Success)"
+echo "🎉 Installation Complete (V25 - Success)"
 echo "================================================"
-echo "💡 Your bot is running. The core download stability has been improved."
+echo "💡 Core download stability and dependencies have been re-installed."
 echo ""
 echo "⚙️ Control Commands:"
 echo "------------------------------------------------"
 echo "A) Service Status:"
 echo "   systemctl status telegram-media-bot"
-echo "B) Restart Bot (Required after placing cookies):"
+echo "B) Restart Bot (Recommended):"
 echo "   systemctl restart telegram-media-bot"
 echo "------------------------------------------------"
 echo ""
-echo "🍪 COOKIE SETUP GUIDE (Mandatory for Pinterest, some Bilibili, and restricted links) 🍪"
+echo "🍪 IMPORTANT: COOKIE SETUP GUIDE (If errors persist) 🍪"
 echo "------------------------------------------------"
-echo "If you get 'Access Denied' or '404/Login Required' errors, you must provide cookies."
-echo "1. INSTALL BROWSER EXTENSION:"
-echo "   Install the 'Get cookies.txt' extension for Chrome/Edge/Brave." 
-echo "2. GET COOKIES:"
-echo "   Go to the problematic website (e.g., Pinterest/Bilibili) and log in."
-echo "   Click the extension icon to download the 'cookies.txt' file."
-echo "3. TRANSFER FILE TO SERVER (Via SCP/WinSCP):"
-echo "   Upload the downloaded 'cookies.txt' file to this exact path on your server:"
-echo "   /opt/telegram-media-bot/cookies/cookies.txt"
-echo "4. RESTART BOT:"
-echo "   Run the restart command (B) above to load the new cookies."
-echo ""
-echo "This should resolve issues with sites requiring login/session data."
+echo "If the bot still fails with Code 1 errors for *all* links, please check Step 4's result."
+echo "For access-related failures (Pinterest, Bilibili login):"
+echo "1. Get 'cookies.txt' from your logged-in browser session."
+echo "2. Upload it to: /opt/telegram-media-bot/cookies/cookies.txt"
+echo "3. Restart the bot (Command B)."
 echo "================================================"
