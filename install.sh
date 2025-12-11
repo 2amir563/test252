@@ -1,11 +1,11 @@
 #!/bin/bash
-# Telegram Media Downloader Bot - Complete Installer (V25 - CRITICAL FIXES + English)
-# Focuses on: Ensuring successful yt-dlp execution and network stability.
+# Telegram Media Downloader Bot - Complete Installer (V26 - CRITICAL DEBUGGING + English)
+# Focuses on: Diagnosing the root cause of Code 1 error (Network/Environment).
 
 set -e # Exit immediately if a command exits with a non-zero status.
 
 echo "=============================================="
-echo "🤖 Telegram Media Downloader Bot - V25 (CRITICAL FIXES + English)"
+echo "🤖 Telegram Media Downloader Bot - V26 (CRITICAL DEBUGGING + English)"
 echo "=============================================="
 echo ""
 
@@ -40,7 +40,6 @@ print_status "Starting installation process..."
 # ============================================
 print_status "Updating and installing essential tools (Python3, PIP, FFmpeg, Core packages)..."
 apt-get update -y
-# Install build-essential for potential dependencies needed by pip packages
 apt-get install -y python3 python3-pip ffmpeg curl wget nano git build-essential
 
 # Remove system's youtube-dl/yt-dlp to prevent conflicts
@@ -81,17 +80,21 @@ python3 -m pip install -r requirements.txt --break-system-packages --ignore-inst
 # ============================================
 echo ""
 print_status "Running critical network and yt-dlp test..."
-# Test if yt-dlp can connect to YouTube/network
-if ! python3 -m yt_dlp --ignore-config --ignore-errors --skip-download --print url https://www.youtube.com/watch?v=dQw4w9WgXcQ >/dev/null 2>&1; then
+TEST_URL="https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+TEST_OUTPUT=$(python3 -m yt_dlp --ignore-config --ignore-errors --skip-download --print url "$TEST_URL" 2>&1)
+TEST_EXIT_CODE=$?
+
+if [ $TEST_EXIT_CODE -ne 0 ]; then
     print_error "FATAL ERROR: yt-dlp failed to run or network access is blocked!"
     echo "This indicates a severe problem with your server's network configuration or firewall."
-    echo "Check your server provider's firewall settings or DNS configuration."
-    # We do NOT exit here, to allow the bot to be installed, but warn user clearly.
+    echo "yt-dlp Test Output (Critical):"
+    echo "------------------------------------------------"
+    echo "$TEST_OUTPUT"
+    echo "------------------------------------------------"
 else
     print_status "yt-dlp and network connectivity check passed successfully."
 fi
 echo ""
-
 
 # ============================================
 # STEP 5: Create Configuration (.env)
@@ -106,14 +109,14 @@ USER_AGENT="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,
 ENVEOF
 
 # ============================================
-# STEP 6: Create Bot File (bot.py - V25 - Fixes + English)
+# STEP 6: Create Bot File (bot.py - V26 - Debugging)
 # ============================================
-print_status "Creating main bot file (bot.py - V25)..."
+print_status "Creating main bot file (bot.py - V26)..."
 
 cat > bot.py << 'PYEOF'
 #!/usr/bin/env python3
 """
-Telegram Media Downloader Bot - V25 (Fixes + English - Title/URL in Caption)
+Telegram Media Downloader Bot - V26 (CRITICAL DEBUGGING - Title/URL in Caption)
 """
 
 import os
@@ -219,7 +222,7 @@ async def get_video_info(url):
     return "N/A" # Return N/A if info fetching fails
 
 async def download_video(url, output_path):
-    """Core download logic with stability fixes for multiple sites"""
+    """Core download logic with stability fixes and DEBUGGING"""
     
     download_format = "bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best"
     
@@ -259,13 +262,15 @@ async def download_video(url, output_path):
         if process.returncode == 0:
             return True, "Success"
         else:
+            # CAPTURE CRITICAL ERROR OUTPUT
             error_output = stderr.decode('utf-8', errors='ignore')
             
             if "HTTP Error 404" in error_output or "Private video" in error_output:
                 return False, f"Download failed. Access/Login Required. Please use cookies."
             
-            logger.error(f"yt-dlp error output: {error_output[:500]}...")
-            return False, f"Download failed: Check URL, Access, or Geo-Block. (Code: {process.returncode})"
+            # If standard fixes fail, log and return the raw error for analysis
+            logger.error(f"yt-dlp error output (Code {process.returncode}): {error_output[:500]}...")
+            return False, f"Download failed: Check URL, Access, or Geo-Block. (Code: {process.returncode}). Raw Error: {error_output.strip().splitlines()[0]}"
             
     except asyncio.TimeoutError:
         return False, "Download Timeout (8 minutes)."
@@ -275,7 +280,7 @@ async def download_video(url, output_path):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /start command"""
     welcome = f"""
-🤖 *UNIVERSAL Media Downloader Bot - V25 (Fixed)*
+🤖 *UNIVERSAL Media Downloader Bot - V26 (Debugging)*
 
 📝 *How to Use:*
 1. Send any media URL (Pinterest, Vimeo, Bilibili, etc.).
@@ -436,13 +441,14 @@ systemctl start telegram-media-bot.service
 sleep 3
 
 # ============================================
-# STEP 9: Show Final Instructions and COOKIE GUIDE (English)
+# STEP 9: Show Final Instructions and DEBUGGING GUIDE
 # ============================================
 echo ""
 echo "================================================"
-echo "🎉 Installation Complete (V25 - Success)"
+echo "🎉 Installation Complete (V26 - Success)"
 echo "================================================"
-echo "💡 Core download stability and dependencies have been re-installed."
+echo "💡 The bot is running. Please test the links again."
+echo "If Code 1 errors persist, the problem is likely network/firewall related."
 echo ""
 echo "⚙️ Control Commands:"
 echo "------------------------------------------------"
@@ -452,11 +458,14 @@ echo "B) Restart Bot (Recommended):"
 echo "   systemctl restart telegram-media-bot"
 echo "------------------------------------------------"
 echo ""
-echo "🍪 IMPORTANT: COOKIE SETUP GUIDE (If errors persist) 🍪"
+echo "⚠️ NEXT DEBUG STEP (If Code 1 remains):"
 echo "------------------------------------------------"
-echo "If the bot still fails with Code 1 errors for *all* links, please check Step 4's result."
-echo "For access-related failures (Pinterest, Bilibili login):"
-echo "1. Get 'cookies.txt' from your logged-in browser session."
-echo "2. Upload it to: /opt/telegram-media-bot/cookies/cookies.txt"
-echo "3. Restart the bot (Command B)."
+echo "1. CHECK THE LOGS:"
+echo "   Run the following command to see the *exact* error that yt-dlp is producing:"
+echo "   journalctl -u telegram-media-bot -f"
+echo ""
+echo "2. RE-RUN MANUAL TEST:"
+echo "   Run the network test manually to confirm external connectivity:"
+echo "   /opt/telegram-media-bot/install.sh (Check Step 4 output from terminal)"
+echo "------------------------------------------------"
 echo "================================================"
