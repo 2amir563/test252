@@ -1,10 +1,11 @@
 #!/bin/bash
-# Telegram Media Downloader Bot - Complete Installer (V23 - Persian/Farsi Localization)
+# Telegram Media Downloader Bot - Complete Installer (V24 - Fixes + English)
+# Targets: Pinterest, Vimeo, Dailymotion, Rumble, Bilibili compatibility fixes.
 
-set -e # در صورت بروز هر گونه خطا، نصب متوقف شود.
+set -e # Exit immediately if a command exits with a non-zero status.
 
 echo "=============================================="
-echo "🤖 ربات دانلودر رسانه تلگرام - V23 (نصب کامل)"
+echo "🤖 Telegram Media Downloader Bot - V24 (Fixes + English)"
 echo "=============================================="
 echo ""
 
@@ -19,36 +20,36 @@ print_error() { echo -e "${RED}[✗]${NC} $1"; }
 
 # Check root access
 if [ "$EUID" -ne 0 ]; then
-    print_error "لطفاً اسکریپت را با دسترسی روت اجرا کنید: sudo bash install.sh"
+    print_error "Please run with root access: sudo bash install.sh"
     exit 1
 fi
 
 # Ask for bot token
-echo "🔑 توکن ربات خود را از @BotFather وارد کنید:"
-read -p "📝 توکن ربات: " BOT_TOKEN
+echo "🔑 Enter your bot token from @BotFather:"
+read -p "📝 Bot Token: " BOT_TOKEN
 
 if [ -z "$BOT_TOKEN" ]; then
-    print_error "وارد کردن توکن ربات ضروری است!"
+    print_error "Bot Token is required!"
     exit 1
 fi
 
-print_status "شروع فرآیند نصب..."
+print_status "Starting installation process..."
 
 # ============================================
 # STEP 1: System Update & Essential Tools
 # ============================================
-print_status "به‌روزرسانی و نصب ابزارهای ضروری (Python3, PIP, FFmpeg)..."
+print_status "Updating and installing essential tools (Python3, PIP, FFmpeg)..."
 apt-get update -y
 apt-get install -y python3 python3-pip ffmpeg curl wget nano git
 
 # Remove system's youtube-dl/yt-dlp to prevent conflicts
-print_status "حذف بسته‌های yt-dlp/youtube-dl سیستمی..."
+print_status "Removing system yt-dlp/youtube-dl packages..."
 apt-get remove -y youtube-dl yt-dlp 2>/dev/null || true
 
 # ============================================
 # STEP 2: Create Project Structure
 # ============================================
-print_status "ایجاد ساختار دایرکتوری پروژه..."
+print_status "Creating project directory structure..."
 INSTALL_DIR="/opt/telegram-media-bot"
 mkdir -p "$INSTALL_DIR"
 cd "$INSTALL_DIR"
@@ -59,7 +60,7 @@ chmod -R 777 downloads logs cookies tmp
 # ============================================
 # STEP 3: Install Python Packages (Core requirements only)
 # ============================================
-print_status "نصب/به‌روزرسانی yt-dlp و بسته‌های Python..."
+print_status "Installing/Upgrading yt-dlp and core Python packages..."
 
 cat > requirements.txt << 'REQEOF'
 python-telegram-bot>=20.7
@@ -76,7 +77,7 @@ python3 -m pip install -r requirements.txt
 # ============================================
 # STEP 4: Create Configuration (.env)
 # ============================================
-print_status "ایجاد فایل‌های پیکربندی..."
+print_status "Creating configuration files..."
 
 cat > .env << ENVEOF
 BOT_TOKEN=${BOT_TOKEN}
@@ -86,14 +87,14 @@ USER_AGENT="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,
 ENVEOF
 
 # ============================================
-# STEP 5: Create Bot File (bot.py - V23 - Persian)
+# STEP 5: Create Bot File (bot.py - V24 - Fixes + English)
 # ============================================
-print_status "ایجاد فایل اصلی ربات (bot.py - V23)..."
+print_status "Creating main bot file (bot.py - V24)..."
 
 cat > bot.py << 'PYEOF'
 #!/usr/bin/env python3
 """
-Telegram Media Downloader Bot - V23 (Persian - Title/URL in Caption)
+Telegram Media Downloader Bot - V24 (Fixes + English - Title/URL in Caption)
 """
 
 import os
@@ -151,16 +152,16 @@ def clean_url(text):
 def format_size(bytes_val):
     """Format file size"""
     if bytes_val is None:
-        return "نامشخص"
+        return "Unknown"
     try:
         bytes_val = float(bytes_val)
-        for unit in ['بایت', 'کیلوبایت', 'مگابایت', 'گیگابایت']:
+        for unit in ['B', 'KB', 'MB', 'GB']:
             if bytes_val < 1024.0:
                 return f"{bytes_val:.1f} {unit}"
             bytes_val /= 1024.0
-        return f"{bytes_val:.1f} ترابایت"
+        return f"{bytes_val:.1f} TB"
     except:
-        return "نامشخص"
+        return "Unknown"
 
 async def get_video_info(url):
     """Fetch video title using yt-dlp --dump-json"""
@@ -186,8 +187,12 @@ async def get_video_info(url):
         stdout, _ = await asyncio.wait_for(process.communicate(), timeout=30) 
         
         if process.returncode == 0:
-            info = json.loads(stdout.decode('utf-8'))
-            return info.get('title', 'N/A')
+            try:
+                info = json.loads(stdout.decode('utf-8'))
+                return info.get('title', 'N/A')
+            except json.JSONDecodeError:
+                logger.error("Failed to decode JSON from yt-dlp info.")
+                return "N/A"
         
     except Exception as e:
         logger.error(f"Error fetching video info: {e}")
@@ -195,7 +200,7 @@ async def get_video_info(url):
     return "N/A" # Return N/A if info fetching fails
 
 async def download_video(url, output_path):
-    """Core download logic"""
+    """Core download logic with stability fixes for multiple sites"""
     
     download_format = "bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best"
     
@@ -208,13 +213,15 @@ async def download_video(url, output_path):
         "--no-playlist",
         "--concurrent-fragments", "4",
         "--limit-rate", "10M",
-        "--retries", "5",               
-        "--fragment-retries", "5",      
-        "--buffer-size", "64K",         
+        # Stability and Access Fixes for various sites (V24)
+        "--retries", "10",               
+        "--fragment-retries", "10",      
         "--user-agent", USER_AGENT, 
         "--no-check-certificate", 
         "--referer", "https://google.com/",
         "--http-chunk-size", "10M",
+        "--force-ipv4", # Fixes some DNS issues
+        "--add-header", "Accept-Language: en-US,en;q=0.5", # Helps Bilibili/foreign sites
         "--force-overwrite",
         url
     ]
@@ -234,21 +241,28 @@ async def download_video(url, output_path):
         if process.returncode == 0:
             return True, "Success"
         else:
-            return False, f"دانلود ناموفق: URL، دسترسی، یا محدودیت جغرافیایی را بررسی کنید."
+            # Enhanced error message for better diagnostics
+            error_output = stderr.decode('utf-8', errors='ignore')
+            
+            if "HTTP Error 404" in error_output or "Private video" in error_output:
+                return False, f"Download failed. Access/Login Required. Please use cookies."
+            
+            logger.error(f"yt-dlp error output: {error_output[:500]}...")
+            return False, f"Download failed: Check URL, Access, or Geo-Block. (Code: {process.returncode})"
             
     except asyncio.TimeoutError:
-        return False, "اتمام زمان دانلود (8 دقیقه)."
+        return False, "Download Timeout (8 minutes)."
     except Exception as e:
-        return False, f"خطای داخلی: {str(e)}"
+        return False, f"Internal Error: {str(e)}"
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /start command"""
     welcome = f"""
-🤖 *ربات دانلودر رسانه جهانی - V23*
+🤖 *UNIVERSAL Media Downloader Bot - V24 (Fixed)*
 
-📝 *نحوه استفاده:*
-1. هر URL ویدیویی را ارسال کنید.
-2. ربات ویدیو را دانلود و همراه با عنوان اصلی برای شما ارسال می‌کند.
+📝 *How to Use:*
+1. Send any media URL (Pinterest, Vimeo, Bilibili, etc.).
+2. The bot will download and send the file with the video title in the caption.
 """
     await update.message.reply_text(welcome, parse_mode=ParseMode.MARKDOWN)
 
@@ -258,11 +272,11 @@ async def handle_url(update: Update, context: ContextTypes.DEFAULT_TYPE):
     url = clean_url(original_url)
     
     if not url:
-        await update.message.reply_text("❌ *URL نامعتبر*", parse_mode=ParseMode.MARKDOWN)
+        await update.message.reply_text("❌ *Invalid URL*", parse_mode=ParseMode.MARKDOWN)
         return
     
     # 1. Fetch Title 
-    msg = await update.message.reply_text(f"🔗 *در حال پردازش URL...*\n\nدر حال دریافت جزئیات ویدیو...", parse_mode=ParseMode.MARKDOWN)
+    msg = await update.message.reply_text(f"🔗 *Processing URL...*\n\nFetching video details...", parse_mode=ParseMode.MARKDOWN)
     video_title = await get_video_info(url)
     
     # Extract site name for filename
@@ -273,7 +287,7 @@ async def handle_url(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except:
         site = "UNKNOWN"
         
-    await msg.edit_text(f"📥 *در حال دانلود...* (عنوان: {video_title[:50]}...)", parse_mode=ParseMode.MARKDOWN)
+    await msg.edit_text(f"📥 *Downloading...* (Title: {video_title[:50]}...)", parse_mode=ParseMode.MARKDOWN)
     
     # Generate filename
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -283,7 +297,7 @@ async def handle_url(update: Update, context: ContextTypes.DEFAULT_TYPE):
     success, result = await download_video(url, output_template)
     
     if not success:
-        await msg.edit_text(f"❌ *دانلود ناموفق*\n\nخطا: `{result}`", parse_mode=ParseMode.MARKDOWN)
+        await msg.edit_text(f"❌ *Download Failed*\n\nError: `{result}`", parse_mode=ParseMode.MARKDOWN)
         return
     
     # Find downloaded file
@@ -291,7 +305,7 @@ async def handle_url(update: Update, context: ContextTypes.DEFAULT_TYPE):
     downloaded_files.sort(key=lambda p: p.stat().st_size, reverse=True)
     
     if not downloaded_files:
-        await msg.edit_text("❌ دانلود تکمیل شد اما فایل نهایی پیدا نشد.", parse_mode=ParseMode.MARKDOWN)
+        await msg.edit_text("❌ Download complete, but final file not found.", parse_mode=ParseMode.MARKDOWN)
         return
     
     file_path = downloaded_files[0]
@@ -299,10 +313,10 @@ async def handle_url(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if file_size > (MAX_SIZE_MB * 1024 * 1024):
         file_path.unlink() 
-        await msg.edit_text(f"❌ *حجم فایل بیش از حد مجاز است:* {format_size(file_size)}", parse_mode=ParseMode.MARKDOWN)
+        await msg.edit_text(f"❌ *File size exceeds limit:* {format_size(file_size)}", parse_mode=ParseMode.MARKDOWN)
         return
     
-    await msg.edit_text(f"📤 *در حال آپلود...*\n\nحجم: {format_size(file_size)}", parse_mode=ParseMode.MARKDOWN)
+    await msg.edit_text(f"📤 *Uploading...*\n\nSize: {format_size(file_size)}", parse_mode=ParseMode.MARKDOWN)
     
     try:
         with open(file_path, 'rb') as file:
@@ -311,9 +325,9 @@ async def handle_url(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Custom Caption Format (Title, Size, URL)
             caption_text = (
                 f"**{video_title}**\n\n"
-                f"✅ دانلود تکمیل شد!\n"
-                f"حجم: {format_size(file_size)}\n"
-                f"لینک اصلی: [لینک]({url})"
+                f"✅ Download Complete!\n"
+                f"Size: {format_size(file_size)}\n"
+                f"Original URL: [Link]({url})"
             )
             
             # Simplified media type detection
@@ -327,7 +341,7 @@ async def handle_url(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     supports_streaming=True
                 )
         
-        await msg.edit_text("🎉 *موفقیت‌آمیز!*", parse_mode=ParseMode.MARKDOWN)
+        await msg.edit_text("🎉 *Success!*", parse_mode=ParseMode.MARKDOWN)
         
         # Auto delete after delay (Simplified)
         async def delete_file_task():
@@ -340,7 +354,7 @@ async def handle_url(update: Update, context: ContextTypes.DEFAULT_TYPE):
         asyncio.create_task(delete_file_task())
         
     except Exception as upload_error:
-        await msg.edit_text(f"❌ *آپلود ناموفق*\n\nخطا: {str(upload_error)[:100]}", parse_mode=ParseMode.MARKDOWN)
+        await msg.edit_text(f"❌ *Upload Failed*\n\nError: {str(upload_error)[:100]}", parse_mode=ParseMode.MARKDOWN)
 
 def main():
     if not os.access(__file__, os.X_OK):
@@ -355,7 +369,7 @@ def main():
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_url))
     
     try:
-        print("✅ ربات شروع به نظرسنجی کرد...")
+        print("✅ Bot started polling...")
         app.run_polling(drop_pending_updates=True)
     except Exception as e:
         print(f"Bot failed to start polling: {e}")
@@ -371,7 +385,7 @@ chmod +x bot.py
 # ============================================
 # STEP 6: Create Systemd Service (Start-up on reboot)
 # ============================================
-print_status "ایجاد سرویس systemd برای اجرای دائمی..."
+print_status "Creating systemd service for persistent running..."
 PYTHON_PATH=$(which python3)
 
 cat > /etc/systemd/system/telegram-media-bot.service << SERVICEEOF
@@ -400,39 +414,40 @@ systemctl enable telegram-media-bot.service
 # ============================================
 # STEP 7: Start Service
 # ============================================
-print_status "شروع سرویس ربات..."
+print_status "Starting the bot service..."
 systemctl start telegram-media-bot.service
 sleep 3
 
 # ============================================
-# STEP 8: Show Final Instructions and COOKIE GUIDE (Persian)
+# STEP 8: Show Final Instructions and COOKIE GUIDE (English)
 # ============================================
 echo ""
 echo "================================================"
-echo "🎉 نصب تکمیل شد (V23 - موفقیت‌آمیز)"
+echo "🎉 Installation Complete (V24 - Success)"
 echo "================================================"
-echo "💡 ربات شما در حال اجرا است. برای رفع خطاهای 'نیاز به ورود' (مانند برخی لینک‌های Streamable یا Pinterest)، از راهنمای کوکی استفاده کنید."
+echo "💡 Your bot is running. The core download stability has been improved."
 echo ""
-echo "⚙️ دستورات کنترل:"
+echo "⚙️ Control Commands:"
 echo "------------------------------------------------"
-echo "A) وضعیت سرویس:"
+echo "A) Service Status:"
 echo "   systemctl status telegram-media-bot"
-echo "B) راه‌اندازی مجدد ربات (پس از قرار دادن کوکی‌ها ضروری است):"
+echo "B) Restart Bot (Required after placing cookies):"
 echo "   systemctl restart telegram-media-bot"
 echo "------------------------------------------------"
 echo ""
-echo "🍪 راهنمای تنظیم کوکی‌ها 🍪"
+echo "🍪 COOKIE SETUP GUIDE (Mandatory for Pinterest, some Bilibili, and restricted links) 🍪"
 echo "------------------------------------------------"
-echo "1. نصب افزونه مرورگر:"
-echo "   افزونه 'Get cookies.txt' را برای مرورگر خود (Chrome/Edge/Brave) نصب کنید." 
-echo "2. دریافت کوکی‌ها:"
-echo "   به وب‌سایت دارای مشکل (مانند Streamable یا Bilibili) بروید و وارد حساب کاربری خود شوید."
-echo "   روی آیکون افزونه کلیک کنید تا فایل 'cookies.txt' دانلود شود."
-echo "3. انتقال فایل به سرور (با استفاده از SCP/WinSCP):"
-echo "   فایل 'cookies.txt' دانلود شده را دقیقاً به این مسیر در سرور خود آپلود کنید:"
+echo "If you get 'Access Denied' or '404/Login Required' errors, you must provide cookies."
+echo "1. INSTALL BROWSER EXTENSION:"
+echo "   Install the 'Get cookies.txt' extension for Chrome/Edge/Brave." 
+echo "2. GET COOKIES:"
+echo "   Go to the problematic website (e.g., Pinterest/Bilibili) and log in."
+echo "   Click the extension icon to download the 'cookies.txt' file."
+echo "3. TRANSFER FILE TO SERVER (Via SCP/WinSCP):"
+echo "   Upload the downloaded 'cookies.txt' file to this exact path on your server:"
 echo "   /opt/telegram-media-bot/cookies/cookies.txt"
-echo "4. راه‌اندازی مجدد ربات:"
-echo "   دستور راه‌اندازی مجدد (B) را اجرا کنید تا کوکی‌های جدید بارگذاری شوند."
+echo "4. RESTART BOT:"
+echo "   Run the restart command (B) above to load the new cookies."
 echo ""
-echo "این روش باید مشکلات دسترسی به لینک‌های محدود را حل کند."
+echo "This should resolve issues with sites requiring login/session data."
 echo "================================================"
